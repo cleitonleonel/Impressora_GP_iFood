@@ -18,7 +18,7 @@ git clone https://github.com/cleitonleonel/Impressora_GP_iFood.git
 ```shell
 cd Impressora_GP_iFood
 npm install
-node index.js
+node server.js
 ```
 
 # Este projeto ajudou você?
