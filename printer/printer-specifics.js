@@ -1,9 +1,4 @@
 const PRINTER_SPECIFICS = {
-  PDF: {
-    cut: [27, 109],
-    feed: [10],
-    init: [27, "@"]
-  },
   Bematech: {
     cut: [27, 109],
     feed: [10],

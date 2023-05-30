@@ -24,8 +24,7 @@ function getPrinterStatus(printerName, printerManufacturer) {
 function getPrintableBuffer(printable, commands) {
   return Promise.resolve(printable.payload.split("\n").map((line) => {
     if (line.trim().length) {
-      return Buffer.from(`${line}
-`);
+      return Buffer.from(`${line}`);
     }
     return Buffer.from(commands.feed);
   }));

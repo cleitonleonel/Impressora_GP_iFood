@@ -1,7 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const Printer = require("../printer");
-const {version} = require("../package.json");
+const { version } = require("../package.json");
+const { exec } = require('child_process');
+
+function print_raw(command) {
+  return exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Erro ao executar o comando: ${error}`);
+      return false;
+    }
+    return true;
+  });
+}
 
 router.get("/", (_, res) => {
   res.send({message: "ok", version});
@@ -27,18 +38,38 @@ router.get("/printers", (_, res) => {
 
 router.post("/print", async (req, res) => {
   const {invoice, printerConfig: {printerManufacturer, printer}} = req.body;
-  try {
-    const jobId = await Printer.print([{
-      type: "TEXT",
-      payload: invoice
-    }], printer, printerManufacturer);
-    res.send({message: "Successfully printed", jobId, version});
-  } catch (error) {
-    res.status(500);
-    res.send({
-      message: "For unknown reason it was not possible to print.",
-      version
-    });
+  console.log(printerManufacturer, printer);
+  if (printer === "PDF") {
+    let bufferData = Buffer.from(invoice);
+    let dataString = bufferData.toString();
+    let command = `echo "${dataString}" | lpr -P ${printer}`;
+    if (print_raw(command)) {
+      console.log("Successfully printed");
+      res.send({message: "Successfully printed", version});
+    } else {
+      console.log("For unknown reason it was not possible to print.");
+      res.status(500);
+      res.send({
+        message: "For unknown reason it was not possible to print.",
+        version
+      });
+    }
+  } else {
+    try {
+      const jobId = await Printer.print([{
+        type: "TEXT",
+        payload: invoice
+      }], printer, printerManufacturer);
+      console.log("Successfully printed");
+      res.send({message: "Successfully printed", jobId, version});
+    } catch (error) {
+      console.log("For unknown reason it was not possible to print.");
+      res.status(500);
+      res.send({
+        message: "For unknown reason it was not possible to print.",
+        version
+      });
+    }
   }
 });
 
