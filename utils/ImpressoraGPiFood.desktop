@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Impressora GP iFood
+Comment=Start Printer Server
+Icon=/home/util/Impressora_GP_iFood/icons/png/AppIcon.png
+Exec=node /home/util/Impressora_GP_iFood/server.js
+Type=Application
+Categories=Development;
+Terminal=false
+Name[pt_BR]=Impressora GP iFood
