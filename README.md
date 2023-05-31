@@ -2,7 +2,7 @@
 
 Servidor Node para comunicação com impressoras locais a partir do [Gestor de Pedidos](https://gestordepedidos.ifood.com.br/#/login)
 
-<img src="https://raw.githubusercontent.com/cleitonleonel/Impressora_GP_iFood/master/icons/png/AppIcon.png" alt="Your image title" width="250"/>
+<img src="https://raw.githubusercontent.com/cleitonleonel/Impressora_GP_iFood/master/static/media/icons/png/AppIcon.png" alt="Your image title" width="250"/>
 
 ## OBS:
 O objetivo desse projeto se deu pelo fato de que o gestor de pedidos disponibilizado para download não cobre sistemas linux
