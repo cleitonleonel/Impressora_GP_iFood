@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const Printer = require("../printer");
+const Printer = require("../controllers/printerController");
 const { version } = require("../package.json");
 const { exec } = require('child_process');
 

@@ -1,4 +1,4 @@
-const PRINTER_SPECIFICS = {
+const PRINTERS = {
   Bematech: {
     cut: [27, 109],
     feed: [10],
@@ -46,4 +46,4 @@ const PRINTER_SPECIFICS = {
   }
 };
 
-module.exports = PRINTER_SPECIFICS;
+module.exports = PRINTERS;

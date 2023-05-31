@@ -2,12 +2,12 @@ const express = require('express');
 const app = express();
 const cors = require("cors");
 
-const routes = require('./routers');
+const routes = require('./routers/printerRoutes');
 const HOST = process.env.HOST || 'localhost';
 const PORT = process.env.PORT || 4013;
 
 app.use(express.json());
-app.use('/static', express.static('static'))
+app.use('/static', express.static('static'));
 app.use(
   (cors)({
     origin: [

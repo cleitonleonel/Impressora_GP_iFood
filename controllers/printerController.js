@@ -1,4 +1,4 @@
-const printer_specifics = require("./printer-specifics");
+const printer_constants = require("./printerConstants");
 const node_printer = require("@thiagoelg/node-printer");
 const unidecode = require("unidecode");
 const PRINTER_STATUS = {
@@ -54,7 +54,7 @@ function print(printables, printerName, printerManufacturer) {
     }
     return printable;
   });
-  const commands = printer_specifics[printerManufacturer];
+  const commands = printer_constants[printerManufacturer];
   return new Promise((resolve, reject) => {
     getPrinterBuffer(decoded, commands).then((data) => {
       node_printer.printDirect({
