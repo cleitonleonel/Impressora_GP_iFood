@@ -24,7 +24,9 @@ function getPrinterStatus(printerName, printerManufacturer) {
 function getPrintableBuffer(printable, commands) {
   return Promise.resolve(printable.payload.split("\n").map((line) => {
     if (line.trim().length) {
-      return Buffer.from(`${line}`);
+      // Precisei alterar essa linha, incluindo um \n para corrigir uma atualização mal
+      // feita pelo ifood...
+      return Buffer.from(`${line + "\n"}`);
     }
     return Buffer.from(commands.feed);
   }));

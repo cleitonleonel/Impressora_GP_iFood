@@ -3,6 +3,7 @@ const router = express.Router();
 const Printer = require("../controllers/printerController");
 const { version } = require("../package.json");
 const { exec } = require('child_process');
+const fs = require('fs');
 
 function print_raw(command) {
   return exec(command, (error, stdout, stderr) => {

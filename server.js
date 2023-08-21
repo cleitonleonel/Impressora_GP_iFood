@@ -6,6 +6,7 @@ const routes = require('./routers/printerRoutes');
 const HOST = process.env.HOST || 'localhost';
 const PORT = process.env.PORT || 4013;
 
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/static', express.static('static'));
 app.use(
