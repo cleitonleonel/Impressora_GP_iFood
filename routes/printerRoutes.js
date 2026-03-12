@@ -22,12 +22,15 @@ router.get("/", (_, res) => {
 router.get("/printers", (_, res) => {
   try {
     let printers = Printer.getPrinterList();
+    // Exibe no endpoint a impressora padrão efetiva para facilitar diagnóstico.
+    let defaultPrinter = Printer.getDefaultPrinterName(printers);
     if (printers.length < 1) {
       printers = [
         "Printer Test - Server Node",
       ];
+      defaultPrinter = null;
     }
-    res.json({printers, version});
+    res.json({printers, defaultPrinter, version});
   } catch (error) {
     res.status(500);
     res.json({
@@ -38,8 +41,32 @@ router.get("/printers", (_, res) => {
 });
 
 router.post("/print", async (req, res) => {
-  const {invoice, printerConfig: {printerManufacturer, printer}} = req.body;
+  const invoice = req.body && req.body.invoice;
+  const printerConfig = req.body && req.body.printerConfig ? req.body.printerConfig : {};
+  // Se o payload vier sem impressora, resolve automaticamente com base no sistema.
+  const printer = Printer.resolvePrinterName(printerConfig.printer);
+  // Se a marca não vier (ou vier inválida), tenta inferir pelo nome e usa fallback.
+  const printerManufacturer = Printer.resolvePrinterManufacturer(printerConfig.printerManufacturer, printer);
   console.log(printerManufacturer, printer);
+
+  if (!invoice) {
+    res.status(400);
+    res.send({
+      message: "Invalid print payload.",
+      version
+    });
+    return;
+  }
+
+  if (!printer) {
+    res.status(500);
+    res.send({
+      message: "No printers available in the operating system.",
+      version
+    });
+    return;
+  }
+
   if (printer === "PDF") {
     let bufferData = Buffer.from(invoice);
     let dataString = bufferData.toString();
@@ -62,7 +89,7 @@ router.post("/print", async (req, res) => {
         payload: invoice
       }], printer, printerManufacturer);
       console.log("Successfully printed");
-      res.send({message: "Successfully printed", jobId, version});
+      res.send({message: "Successfully printed", jobId, printer, printerManufacturer, version});
     } catch (error) {
       console.log("For unknown reason it was not possible to print.");
       res.status(500);

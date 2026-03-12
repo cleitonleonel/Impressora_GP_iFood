@@ -77,6 +77,35 @@ npm install
 node server.js
 ```
 
+## Impressora automática (Linux/CUPS)
+
+Agora o servidor tenta selecionar a impressora automaticamente para reduzir configuração manual.
+
+Ordem de resolução no `POST /print`:
+
+1. Usa a impressora enviada no payload (se existir no sistema).
+2. Usa a impressora padrão do sistema (CUPS).
+3. Usa a primeira impressora disponível na lista.
+
+Também foi adicionado o campo `defaultPrinter` no endpoint `GET /printers`.
+
+### Forçar uma impressora (opcional)
+
+Se você quiser fixar uma impressora sem alterar código, pode iniciar o servidor com:
+
+```shell
+PRINTER_NAME="NOME_DA_IMPRESSORA" node server.js
+```
+
+### Definir impressora padrão no Ubuntu (CUPS)
+
+```shell
+lpstat -p -d
+lpoptions -d NOME_DA_IMPRESSORA
+```
+
+Assim o sistema usa automaticamente a impressora padrão do seu Linux para impressão dos pedidos.
+
 # Este projeto ajudou você?
 
 Se esse projeto deixar você ficar à vontade para fazer uma doação =), pode ser R $ 0,50 hahahaha. Para isso, basta ler o qrcode abaixo, ele foi gerado com meu outro projeto chamado [Pypix](https://github.com/cleitonleonel/pypix.git) arquivo de amostra.
