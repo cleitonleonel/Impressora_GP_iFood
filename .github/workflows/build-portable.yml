@@ -8,7 +8,7 @@ on:
 
 jobs:
   # ─────────────────────────────────────────
-  # Windows — .zip + .exe + .msi (32-bit)
+  # Windows — .zip + .exe (32-bit)
   # ─────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
@@ -90,14 +90,12 @@ jobs:
           if (Test-Path package.json) { Copy-Item package.json dist\ }
           Copy-Item dist_run.bat dist\run.bat
 
-      # ── .zip portátil ──
       - name: Create ZIP
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}"
           Compress-Archive -Path dist\* -DestinationPath impressora_portable_$v.zip -Force
 
-      # ── .exe installer (NSIS) ──
       - name: Install NSIS
         shell: pwsh
         run: |
@@ -141,7 +139,7 @@ jobs:
             CreateShortcut  "`$DESKTOP\`${APP_NAME}.lnk" "`${INSTALL_DIR}\run.bat"
 
             WriteUninstaller "`${INSTALL_DIR}\uninstall.exe"
-            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ImpressoraGPiFood" "DisplayName"    "`${APP_NAME}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ImpressoraGPiFood" "DisplayName"     "`${APP_NAME}"
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ImpressoraGPiFood" "UninstallString" "`${INSTALL_DIR}\uninstall.exe"
             WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ImpressoraGPiFood" "DisplayVersion"  "`${APP_VERSION}"
           SectionEnd
@@ -157,147 +155,6 @@ jobs:
 
           makensis installer.nsi
 
-      # ── .msi installer (WiX 4) ──
-      - name: Install WiX Toolset
-        shell: pwsh
-        run: |
-          dotnet tool install --global wix --version 4.0.5
-          wix extension add WixToolset.UI.wixext/4.0.5 --global
-
-      - name: Build .msi (WiX)
-        shell: pwsh
-        run: |
-          $v = "${{ steps.version.outputs.version }}"
-          $parts = $v -split '\.'
-          $wixVer = "$($parts[0]).$($parts[1]).$($parts[2]).$($parts[3])"
-
-          # ── Gera harvested.wxs via PowerShell (WiX 4 não tem harvest CLI) ──
-          $distPath = Resolve-Path "dist"
-          $files = Get-ChildItem -Path $distPath -Recurse -File
-
-          $components = @()
-          $componentIds = @()
-          $idx = 0
-
-          foreach ($file in $files) {
-            $rel     = $file.FullName.Substring($distPath.Path.Length + 1)
-            $dirRel  = Split-Path $rel -Parent
-            $dirId   = if ($dirRel) {
-                         "dir_" + ($dirRel -replace '[\\\/\.\-\s]','_')
-                       } else { "INSTALLFOLDER" }
-            $compId  = "comp_$idx"
-            $guid    = [System.Guid]::NewGuid().ToString().ToUpper()
-            $componentIds += $compId
-
-            $components += @"
-              <Component Id="$compId" Directory="$dirId" Guid="$guid">
-                <File Source="dist\$rel" KeyPath="yes" />
-              </Component>
-          "@
-            $idx++
-          }
-
-          # Coleta todos os subdiretórios únicos
-          $dirs = Get-ChildItem -Path $distPath -Recurse -Directory |
-                  Sort-Object FullName
-
-          $dirXml = ""
-          # Monta árvore de diretórios aninhada
-          $dirMap = @{}
-          foreach ($dir in $dirs) {
-            $rel    = $dir.FullName.Substring($distPath.Path.Length + 1)
-            $parts2 = $rel -split '\\'
-            $dirId  = "dir_" + ($rel -replace '[\\\/\.\-\s]','_')
-            $name   = $dir.Name
-            $parentRel = Split-Path $rel -Parent
-            $parentId  = if ($parentRel) {
-                           "dir_" + ($parentRel -replace '[\\\/\.\-\s]','_')
-                         } else { "INSTALLFOLDER" }
-            $dirMap[$dirId] = @{ name=$name; parent=$parentId; rel=$rel }
-          }
-
-          $dirXmlLines = foreach ($key in $dirMap.Keys) {
-            $d = $dirMap[$key]
-            "        <Directory Id=""$key"" Name=""$($d.name)"" />"
-          }
-
-          $componentRefs = ($componentIds | ForEach-Object {
-            "              <ComponentRef Id=""$_"" />"
-          }) -join "`n"
-
-          $componentsBlock = $components -join "`n"
-
-          $wxs = @"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-               xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
-
-            <Package
-              Name="Impressora GP iFood"
-              Version="$wixVer"
-              Manufacturer="iFood"
-              UpgradeCode="A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
-              Scope="perMachine">
-
-              <MajorUpgrade DowngradeErrorMessage="Uma versão mais nova já está instalada." />
-              <MediaTemplate EmbedCab="yes" />
-
-              <ui:WixUI Id="WixUI_InstallDir" />
-              <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
-
-              <Feature Id="ProductFeature" Title="Impressora GP iFood" Level="1">
-          $componentRefs
-                <ComponentRef Id="AppShortcut" />
-              </Feature>
-
-              <StandardDirectory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="Impressora GP iFood">
-          $($dirXmlLines -join "`n")
-                </Directory>
-              </StandardDirectory>
-
-              <StandardDirectory Id="ProgramMenuFolder">
-                <Directory Id="AppMenuFolder" Name="Impressora GP iFood" />
-              </StandardDirectory>
-
-          $componentsBlock
-
-              <Component Id="AppShortcut"
-                         Directory="AppMenuFolder"
-                         Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
-                <Shortcut Id="StartMenuShortcut"
-                          Name="Impressora GP iFood"
-                          Target="[INSTALLFOLDER]run.bat"
-                          WorkingDirectory="INSTALLFOLDER" />
-                <Shortcut Id="DesktopShortcut"
-                          Name="Impressora GP iFood"
-                          Directory="DesktopFolder"
-                          Target="[INSTALLFOLDER]run.bat"
-                          WorkingDirectory="INSTALLFOLDER" />
-                <RemoveFolder Id="RemoveAppMenuFolder"
-                              Directory="AppMenuFolder"
-                              On="uninstall" />
-                <RegistryValue Root="HKCU"
-                               Key="Software\ImpressoraGPiFood"
-                               Name="installed"
-                               Type="integer"
-                               Value="1"
-                               KeyPath="yes" />
-              </Component>
-
-            </Package>
-          </Wix>
-          "@
-
-          $wxs | Out-File -FilePath product.wxs -Encoding utf8
-
-          Write-Host "=== product.wxs gerado com $idx arquivos ==="
-
-          wix build product.wxs `
-            -ext WixToolset.UI.wixext `
-            -o "impressora_gp_$v.msi"
-
-      # ── Upload ──
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -305,7 +162,6 @@ jobs:
           path: |
             impressora_portable_*.zip
             impressora_gp_*.exe
-            impressora_gp_*.msi
           retention-days: 7
 
   # ─────────────────────────────────────────
@@ -479,7 +335,6 @@ jobs:
             | Arquivo | Plataforma | Tipo |
             |---------|-----------|------|
             | `impressora_gp_*.exe`             | Windows 32-bit | Installer com wizard + atalhos |
-            | `impressora_gp_*.msi`             | Windows 32-bit | MSI corporativo / GPO          |
             | `impressora_portable_*.zip`       | Windows 32-bit | Portátil, sem instalar         |
             | `impressora_gp_*_amd64.deb`       | Ubuntu/Debian 64-bit | Pacote nativo          |
             | `impressora_gp_*_x86_64.AppImage` | Linux 64-bit   | Universal, sem instalar        |
