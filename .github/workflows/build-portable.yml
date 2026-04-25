@@ -34,7 +34,6 @@ jobs:
           Remove-Item extracted -Recurse -Force
           Remove-Item node12.zip -Force
 
-
       # ---------------------------------------
       # Put portable Node first in PATH
       # ---------------------------------------
