@@ -3,7 +3,8 @@ name: Build Portable Node12 (32-bit) for Impressora_GP_iFood
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   build:
@@ -13,45 +14,146 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+
+      # ---------------------------------------
+      # Download portable Node.js 12 (x86)
+      # ---------------------------------------
       - name: Download Node.js 12 (32-bit)
+        shell: pwsh
         run: |
-          mkdir nodejs
-          curl -L https://nodejs.org/dist/v12.22.12/node-v12.22.12-win-x86.zip -o node12.zip
-          tar -xf node12.zip -C nodejs --strip-components=1
-          del node12.zip
+          New-Item -ItemType Directory -Force nodejs
 
-      - name: Setup PATH
-        run: echo "PATH=$env:CD\nodejs;$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Invoke-WebRequest `
+            https://nodejs.org/dist/v12.22.12/node-v12.22.12-win-x86.zip `
+            -OutFile node12.zip
 
-      - name: Node version check
+          Expand-Archive node12.zip -DestinationPath extracted
+
+          Move-Item extracted\node-v12.22.12-win-x86\* nodejs\
+
+          Remove-Item extracted -Recurse -Force
+          Remove-Item node12.zip -Force
+
+
+      # ---------------------------------------
+      # Put portable Node first in PATH
+      # ---------------------------------------
+      - name: Configure PATH
+        shell: pwsh
         run: |
+          "$pwd\nodejs" |
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+
+      # ---------------------------------------
+      # Verify correct node version
+      # ---------------------------------------
+      - name: Verify Node version
+        shell: pwsh
+        run: |
+          where.exe node
           node -v
           npm -v
 
-      - name: Install dependencies (rebuild native modules)
-        run: |
-          npm install --only=prod --build-from-source
 
+      # ---------------------------------------
+      # Install dependencies
+      # (no build-from-source intentionally)
+      # ---------------------------------------
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          npm install --production
+
+
+      # ---------------------------------------
+      # Optional test if server starts
+      # ---------------------------------------
+      - name: Validate project
+        shell: pwsh
+        run: |
+          if (Test-Path server.js) {
+            Write-Host "server.js found"
+          } else {
+            throw "server.js not found"
+          }
+
+
+      # ---------------------------------------
+      # Create launcher
+      # ---------------------------------------
+      - name: Generate run.bat
+        shell: pwsh
+        run: |
+          @"
+          @echo off
+          cd /d %~dp0
+          nodejs\node.exe server.js
+          pause
+          "@ | Out-File dist_run.bat -Encoding ascii
+
+
+      # ---------------------------------------
+      # Assemble portable package
+      # ---------------------------------------
       - name: Prepare portable package
+        shell: pwsh
         run: |
-          mkdir dist
-          xcopy nodejs dist\nodejs /E /I /Y
-          xcopy server.js dist\ /Y
-          if exist public xcopy public dist\public /E /I /Y
-          if exist views xcopy views dist\views /E /I /Y
-          if exist utils xcopy utils dist\utils /E /I /Y
-          if exist routes xcopy routes dist\routes /E /I /Y
-          if exist controllers xcopy controllers dist\controllers /E /I /Y
-          xcopy package.json dist\ /Y
-          xcopy node_modules dist\node_modules /E /I /Y
-          copy run.bat dist\
+          New-Item -ItemType Directory -Force dist
 
-      - name: Create portable ZIP
-        run: powershell Compress-Archive -Path dist\* -DestinationPath impressora_portable.zip
+          Copy-Item nodejs dist\nodejs -Recurse
+          Copy-Item node_modules dist\node_modules -Recurse
 
-      - name: Upload portable artifact
+          Copy-Item server.js dist\
+
+          if (Test-Path public) {
+            Copy-Item public dist\public -Recurse
+          }
+
+          if (Test-Path views) {
+            Copy-Item views dist\views -Recurse
+          }
+
+          if (Test-Path utils) {
+            Copy-Item utils dist\utils -Recurse
+          }
+
+          if (Test-Path routes) {
+            Copy-Item routes dist\routes -Recurse
+          }
+
+          if (Test-Path controllers) {
+            Copy-Item controllers dist\controllers -Recurse
+          }
+
+          if (Test-Path config) {
+            Copy-Item config dist\config -Recurse
+          }
+
+          if (Test-Path package.json) {
+            Copy-Item package.json dist\
+          }
+
+          Copy-Item dist_run.bat dist\run.bat
+
+
+      # ---------------------------------------
+      # Zip artifact
+      # ---------------------------------------
+      - name: Create ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist\* `
+            -DestinationPath impressora_portable.zip `
+            -Force
+
+
+      # ---------------------------------------
+      # Upload artifact
+      # ---------------------------------------
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: impressora_gp_portable
           path: impressora_portable.zip
-
