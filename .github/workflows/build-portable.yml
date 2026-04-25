@@ -171,6 +171,14 @@ jobs:
           $parts = $v -split '\.'
           $wixVer = "$($parts[0]).$($parts[1]).$($parts[2]).$($parts[3])"
 
+          # Harvest automático de todos os arquivos do dist\
+          wix extension add WixToolset.Util.wixext/4.0.5 --global
+          wix harvest dir dist\ `
+            -componentGroupName HarvestedFiles `
+            -directoryRefId INSTALLFOLDER `
+            -keepEmptyFolders `
+            -out harvested.wxs
+
           @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
@@ -190,45 +198,21 @@ jobs:
               <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
               <Feature Id="ProductFeature" Title="Impressora GP iFood" Level="1">
-                <ComponentGroupRef Id="AppFiles" />
-                <ComponentGroupRef Id="NodeFiles" />
-                <ComponentGroupRef Id="NodeModules" />
+                <ComponentGroupRef Id="HarvestedFiles" />
                 <ComponentRef Id="AppShortcut" />
               </Feature>
 
               <StandardDirectory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="Impressora GP iFood">
-                  <Directory Id="NodeDir" Name="nodejs" />
-                  <Directory Id="ModulesDir" Name="node_modules" />
-                </Directory>
+                <Directory Id="INSTALLFOLDER" Name="Impressora GP iFood" />
               </StandardDirectory>
 
               <StandardDirectory Id="ProgramMenuFolder">
                 <Directory Id="AppMenuFolder" Name="Impressora GP iFood" />
               </StandardDirectory>
 
-              <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
-                <Component Id="ServerJs">
-                  <File Source="dist\server.js" KeyPath="yes" />
-                </Component>
-                <Component Id="RunBat">
-                  <File Source="dist\run.bat" />
-                </Component>
-              </ComponentGroup>
-
-              <ComponentGroup Id="NodeFiles" Directory="NodeDir">
-                <Component Id="NodeExe">
-                  <File Source="dist\nodejs\node.exe" KeyPath="yes" />
-                </Component>
-              </ComponentGroup>
-
-              <ComponentGroup Id="NodeModules" Directory="ModulesDir">
-                <Component Id="ModulesPlaceholder">
-                  <CreateFolder />
-                </Component>
-              </ComponentGroup>
-
-              <Component Id="AppShortcut" Directory="AppMenuFolder">
+              <Component Id="AppShortcut"
+                         Directory="AppMenuFolder"
+                         Guid="B2C3D4E5-F6A7-8901-BCDE-F12345678901">
                 <Shortcut Id="StartMenuShortcut"
                           Name="Impressora GP iFood"
                           Target="[INSTALLFOLDER]run.bat"
@@ -238,7 +222,9 @@ jobs:
                           Directory="DesktopFolder"
                           Target="[INSTALLFOLDER]run.bat"
                           WorkingDirectory="INSTALLFOLDER" />
-                <RemoveFolder Id="RemoveAppMenuFolder" Directory="AppMenuFolder" On="uninstall" />
+                <RemoveFolder Id="RemoveAppMenuFolder"
+                              Directory="AppMenuFolder"
+                              On="uninstall" />
                 <RegistryValue Root="HKCU"
                                Key="Software\ImpressoraGPiFood"
                                Name="installed"
@@ -251,8 +237,9 @@ jobs:
           </Wix>
           "@ | Out-File -FilePath product.wxs -Encoding utf8
 
-          wix build product.wxs `
+          wix build product.wxs harvested.wxs `
             -ext WixToolset.UI.wixext `
+            -ext WixToolset.Util.wixext `
             -o "impressora_gp_$v.msi"
 
       # ── Upload ──
