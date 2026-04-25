@@ -1,4 +1,4 @@
-name: Build Portable Node12 (32-bit) for Impressora_GP_iFood
+name: Build & Release Impressora_GP_iFood
 
 on:
   workflow_dispatch:
@@ -7,46 +7,43 @@ on:
       - main
 
 jobs:
-  build:
+  # ─────────────────────────────────────────
+  # Windows — .zip portátil 32-bit
+  # ─────────────────────────────────────────
+  build-windows:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set version
+        id: version
+        shell: pwsh
+        run: |
+          $v = Get-Date -Format "yyyy.MM.dd.HHmm"
+          echo "version=$v" >> $env:GITHUB_OUTPUT
 
-      # ---------------------------------------
-      # Download portable Node.js 12 (x86)
-      # ---------------------------------------
       - name: Download Node.js 12 (32-bit)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force nodejs
-
           Invoke-WebRequest `
             https://nodejs.org/dist/v12.22.12/node-v12.22.12-win-x86.zip `
             -OutFile node12.zip
-
           Expand-Archive node12.zip -DestinationPath extracted
-
           Move-Item extracted\node-v12.22.12-win-x86\* nodejs\
-
           Remove-Item extracted -Recurse -Force
           Remove-Item node12.zip -Force
 
-      # ---------------------------------------
-      # Put portable Node first in PATH
-      # ---------------------------------------
       - name: Configure PATH
         shell: pwsh
         run: |
           "$pwd\nodejs" |
             Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-
-      # ---------------------------------------
-      # Verify correct node version
-      # ---------------------------------------
       - name: Verify Node version
         shell: pwsh
         run: |
@@ -54,20 +51,10 @@ jobs:
           node -v
           npm -v
 
-
-      # ---------------------------------------
-      # Install dependencies
-      # (no build-from-source intentionally)
-      # ---------------------------------------
       - name: Install dependencies
         shell: pwsh
-        run: |
-          npm install --production
+        run: npm install --production
 
-
-      # ---------------------------------------
-      # Optional test if server starts
-      # ---------------------------------------
       - name: Validate project
         shell: pwsh
         run: |
@@ -77,10 +64,6 @@ jobs:
             throw "server.js not found"
           }
 
-
-      # ---------------------------------------
-      # Create launcher
-      # ---------------------------------------
       - name: Generate run.bat
         shell: pwsh
         run: |
@@ -91,68 +74,225 @@ jobs:
           pause
           "@ | Out-File dist_run.bat -Encoding ascii
 
-
-      # ---------------------------------------
-      # Assemble portable package
-      # ---------------------------------------
       - name: Prepare portable package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist
-
-          Copy-Item nodejs dist\nodejs -Recurse
-          Copy-Item node_modules dist\node_modules -Recurse
-
-          Copy-Item server.js dist\
-
-          if (Test-Path public) {
-            Copy-Item public dist\public -Recurse
-          }
-
-          if (Test-Path views) {
-            Copy-Item views dist\views -Recurse
-          }
-
-          if (Test-Path utils) {
-            Copy-Item utils dist\utils -Recurse
-          }
-
-          if (Test-Path routes) {
-            Copy-Item routes dist\routes -Recurse
-          }
-
-          if (Test-Path controllers) {
-            Copy-Item controllers dist\controllers -Recurse
-          }
-
-          if (Test-Path config) {
-            Copy-Item config dist\config -Recurse
-          }
-
-          if (Test-Path package.json) {
-            Copy-Item package.json dist\
-          }
-
+          Copy-Item nodejs        dist\nodejs        -Recurse
+          Copy-Item node_modules  dist\node_modules  -Recurse
+          Copy-Item server.js     dist\
+          if (Test-Path public)       { Copy-Item public       dist\public       -Recurse }
+          if (Test-Path views)        { Copy-Item views        dist\views        -Recurse }
+          if (Test-Path utils)        { Copy-Item utils        dist\utils        -Recurse }
+          if (Test-Path routes)       { Copy-Item routes       dist\routes       -Recurse }
+          if (Test-Path controllers)  { Copy-Item controllers  dist\controllers  -Recurse }
+          if (Test-Path config)       { Copy-Item config       dist\config       -Recurse }
+          if (Test-Path package.json) { Copy-Item package.json dist\ }
           Copy-Item dist_run.bat dist\run.bat
 
-
-      # ---------------------------------------
-      # Zip artifact
-      # ---------------------------------------
       - name: Create ZIP
         shell: pwsh
         run: |
-          Compress-Archive `
-            -Path dist\* `
-            -DestinationPath impressora_portable.zip `
-            -Force
+          $v = "${{ steps.version.outputs.version }}"
+          Compress-Archive -Path dist\* -DestinationPath impressora_portable_$v.zip -Force
 
-
-      # ---------------------------------------
-      # Upload artifact
-      # ---------------------------------------
-      - name: Upload artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: impressora_gp_portable
-          path: impressora_portable.zip
+          name: windows-artifacts
+          path: impressora_portable_*.zip
+          retention-days: 7
+
+  # ─────────────────────────────────────────
+  # Linux — .deb i386 + .AppImage i686
+  # Node 12 x86 bundled (sem depender do sistema)
+  # ─────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version
+        id: version
+        run: echo "version=$(date +'%Y.%m.%d.%H%M')" >> $GITHUB_OUTPUT
+
+      # ── Node 12 x86 para rodar npm install ──
+      - name: Download Node.js 12 (x86 — build deps)
+        run: |
+          wget -q https://nodejs.org/dist/v12.22.12/node-v12.22.12-linux-x86.tar.xz \
+            -O node12-x86.tar.xz
+          mkdir -p node12-x86
+          tar -xf node12-x86.tar.xz -C node12-x86 --strip-components=1
+          rm node12-x86.tar.xz
+
+      - name: Install dependencies (via Node x86)
+        run: |
+          export PATH="$PWD/node12-x86/bin:$PATH"
+          node -v && npm -v
+          npm install --production
+
+      - name: Validate project
+        run: |
+          [ -f server.js ] || (echo "server.js not found" && exit 1)
+
+      # ── Multiarch i386 para fpm ──
+      - name: Enable i386 multiarch
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+
+      - name: Install fpm
+        run: |
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install fpm --no-document
+
+      # ── Monta árvore de pacote com Node bundled ──
+      - name: Prepare package tree
+        run: |
+          PKG=pkg_root
+          APPROOT=$PKG/opt/impressora-gp
+
+          mkdir -p $APPROOT/bin
+
+          # Node 12 x86 bundado dentro do pacote
+          cp -r node12-x86 $APPROOT/node
+
+          cp -r node_modules  $APPROOT/
+          cp    server.js     $APPROOT/
+          [ -d public      ] && cp -r public      $APPROOT/
+          [ -d views       ] && cp -r views       $APPROOT/
+          [ -d utils       ] && cp -r utils       $APPROOT/
+          [ -d routes      ] && cp -r routes      $APPROOT/
+          [ -d controllers ] && cp -r controllers $APPROOT/
+          [ -d config      ] && cp -r config      $APPROOT/
+          [ -f package.json ] && cp package.json  $APPROOT/
+
+          # launcher que usa o node bundado
+          mkdir -p $PKG/usr/bin
+          cat > $PKG/usr/bin/impressora-gp << 'EOF'
+          #!/bin/bash
+          exec /opt/impressora-gp/node/bin/node /opt/impressora-gp/server.js "$@"
+          EOF
+          chmod +x $PKG/usr/bin/impressora-gp
+
+      # ── .deb i386 ──
+      - name: Build .deb (i386)
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          fpm \
+            -s dir \
+            -t deb \
+            -n impressora-gp-ifood \
+            -v $VERSION \
+            --architecture i386 \
+            --description "Impressora GP iFood - servidor de impressão 32-bit" \
+            --deb-no-default-config-files \
+            -C pkg_root \
+            -p impressora_gp_${VERSION}_i386.deb \
+            .
+
+      # ── .AppImage i686 ──
+      - name: Install appimagetool (i686)
+        run: |
+          wget -q \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-i686.AppImage \
+            -O /usr/local/bin/appimagetool
+          chmod +x /usr/local/bin/appimagetool
+          # extrair sem FUSE (runner não tem FUSE disponível)
+          /usr/local/bin/appimagetool --appimage-extract
+          sudo mv squashfs-root /opt/appimagetool-extracted
+          sudo ln -sf /opt/appimagetool-extracted/AppRun /usr/local/bin/appimagetool
+
+      - name: Build .AppImage (i686)
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          APPDIR=AppDir
+
+          mkdir -p $APPDIR/usr/lib/impressora-gp
+
+          # Node 12 x86 bundado no AppImage
+          cp -r node12-x86            $APPDIR/usr/lib/impressora-gp/node
+          cp -r node_modules          $APPDIR/usr/lib/impressora-gp/
+          cp    server.js             $APPDIR/usr/lib/impressora-gp/
+          [ -d public      ] && cp -r public      $APPDIR/usr/lib/impressora-gp/
+          [ -d views       ] && cp -r views       $APPDIR/usr/lib/impressora-gp/
+          [ -d utils       ] && cp -r utils       $APPDIR/usr/lib/impressora-gp/
+          [ -d routes      ] && cp -r routes      $APPDIR/usr/lib/impressora-gp/
+          [ -d controllers ] && cp -r controllers $APPDIR/usr/lib/impressora-gp/
+          [ -d config      ] && cp -r config      $APPDIR/usr/lib/impressora-gp/
+          [ -f package.json ] && cp package.json  $APPDIR/usr/lib/impressora-gp/
+
+          # AppRun usa o node bundado
+          cat > $APPDIR/AppRun << 'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/lib/impressora-gp/node/bin/node" \
+               "$HERE/usr/lib/impressora-gp/server.js" "$@"
+          EOF
+          chmod +x $APPDIR/AppRun
+
+          cat > $APPDIR/impressora-gp.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Impressora GP iFood
+          Exec=impressora-gp
+          Icon=impressora-gp
+          Type=Application
+          Categories=Utility;
+          EOF
+
+          # ícone mínimo válido (1x1 PNG)
+          printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82' \
+            > $APPDIR/impressora-gp.png
+
+          ARCH=i686 appimagetool $APPDIR impressora_gp_${VERSION}_i686.AppImage
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-artifacts
+          path: |
+            impressora_gp_*_i386.deb
+            impressora_gp_*_i686.AppImage
+          retention-days: 7
+
+  # ─────────────────────────────────────────
+  # Release — agrega e publica
+  # ─────────────────────────────────────────
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-files
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -lh release-files/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ needs.build-linux.outputs.version }}
+          name: "Impressora GP iFood — ${{ needs.build-linux.outputs.version }}"
+          body: |
+            ## Build automático — ${{ needs.build-linux.outputs.version }}
+
+            Todos os pacotes incluem **Node.js 12 x86 bundado** — sem dependências externas.
+
+            | Arquivo | Plataforma |
+            |---------|-----------|
+            | `impressora_portable_*.zip` | Windows 32-bit (portátil) |
+            | `impressora_gp_*_i386.deb`  | Ubuntu/Debian 32-bit |
+            | `impressora_gp_*_i686.AppImage` | Linux 32-bit universal |
+          files: release-files/*
+          draft: false
+          prerelease: false
